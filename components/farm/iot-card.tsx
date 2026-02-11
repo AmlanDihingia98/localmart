@@ -2,28 +2,32 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Activity, Droplets, Thermometer, Wind } from "lucide-react"
 
 interface IoTCardProps {
-    type: 'soil_moisture' | 'ph' | 'temperature' | 'humidity'
+    title?: string
+    type: 'soil_moisture' | 'ph' | 'temperature' | 'humidity' | 'dissolved_oxygen'
     value: number
     unit: string
     status: 'good' | 'warning' | 'critical'
 }
 
-export function IoTCard({ type, value, unit, status }: IoTCardProps) {
+export function IoTCard({ title, type, value, unit, status }: IoTCardProps) {
     const getIcon = () => {
         switch (type) {
             case 'soil_moisture': return <Droplets className="h-4 w-4" />
             case 'ph': return <Activity className="h-4 w-4" />
             case 'temperature': return <Thermometer className="h-4 w-4" />
             case 'humidity': return <Wind className="h-4 w-4" />
+            case 'dissolved_oxygen': return <Activity className="h-4 w-4" />
         }
     }
 
     const getTitle = () => {
+        if (title) return title
         switch (type) {
             case 'soil_moisture': return "Soil Moisture"
             case 'ph': return "pH Level"
             case 'temperature': return "Temperature"
             case 'humidity': return "Humidity"
+            case 'dissolved_oxygen': return "Dissolved Oxygen"
         }
     }
 

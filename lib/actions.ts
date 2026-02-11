@@ -23,6 +23,8 @@ export async function addOperationalLog(data: LogFormValues) {
                 unit: data.unit,
                 notes: data.notes ?? null,
                 log_date: data.log_date,
+                average_weight: data.average_weight,
+                total_count: data.total_count
             },
         ] as any)
 
@@ -200,66 +202,94 @@ export async function addHarvest(data: HarvestFormValues) {
 
 export async function addSensorReading(data: SensorReadingFormValues) {
     const supabase = await createClient()
+    const results = []
 
-    // 1. Find or Create a "Manual Entry" Device for this farm
-    const { data: devices } = await supabase
-        .from('iot_devices')
-        .select('id')
-        .eq('farm_id', data.farm_id)
-        .eq('device_type', 'climate_station')
-        .eq('device_name', 'Manual Entry')
-        .limit(1)
+    // Helper to process a reading group
+    const processGroup = async (
+        deviceName: string,
+        deviceType: 'soil_moisture' | 'water_quality' | 'climate_station',
+        readingData: any
+    ) => {
+        // Check if group has any valid data
+        const hasData = Object.values(readingData).some(v => v !== undefined && v !== null)
+        if (!hasData) return
 
-    let deviceId = (devices as any)?.[0]?.id
-
-    if (!deviceId) {
-        const { data: newDevice, error: deviceError } = await supabase
+        // 1. Find or Create Device
+        let { data: device } = await supabase
             .from('iot_devices')
-            .insert([{
-                farm_id: data.farm_id,
-                device_name: 'Manual Entry',
-                device_type: 'climate_station',
-                is_active: true
-            }] as any)
-            .select()
+            .select('id')
+            .eq('farm_id', data.farm_id)
+            .eq('device_type', deviceType)
+            .eq('device_name', deviceName)
             .single()
 
-        if (deviceError || !newDevice) {
-            return { success: false, message: 'Failed to initialize manual log device' }
-        }
-        deviceId = (newDevice as any).id
-    }
+        if (!device) {
+            const { data: newDevice, error } = await supabase
+                .from('iot_devices')
+                .insert([{
+                    farm_id: data.farm_id,
+                    device_name: deviceName,
+                    device_type: deviceType,
+                    is_active: true
+                }] as any)
+                .select()
+                .single()
 
-    try {
-        const { error } = await supabase.from('iot_readings').insert([
+            if (error || !newDevice) {
+                console.error(`Failed to create ${deviceName}:`, error)
+                return { success: false, message: `Failed to create ${deviceName}` }
+            }
+            device = newDevice
+        }
+
+        if (!device) return { success: false, message: `Device ${deviceName} not found` }
+
+        // 2. Insert Reading
+        const { error: insertError } = await supabase.from('iot_readings').insert([
             {
-                device_id: deviceId,
+                device_id: (device as any).id,
                 recorded_at: data.recorded_at,
-                soil_moisture: data.soil_moisture,
-                ph_level: data.ph_level,
-                temperature: data.temperature,
-                humidity: data.humidity,
-                npk_nitrogen: data.npk_nitrogen,
-                npk_phosphorus: data.npk_phosphorus,
-                npk_potassium: data.npk_potassium,
-                dissolved_oxygen: data.dissolved_oxygen,
-                ammonia: data.ammonia,
-                nitrate: data.nitrate,
-                salinity: data.salinity
+                // Spread valid data, others will be null by default DB behavior or excluded
+                ...readingData
             },
         ] as any)
 
-        if (error) {
-            console.error('Supabase Error:', error)
-            return { success: false, message: error.message }
+        if (insertError) {
+            console.error(`Failed to save ${deviceName} readings:`, insertError)
+            return { success: false, message: insertError.message }
         }
-
-        revalidatePath(`/dashboard/farms/${data.farm_id}`)
-        return { success: true, message: 'Readings recorded successfully' }
-    } catch (error) {
-        console.error('Server Action Error:', error)
-        return { success: false, message: 'Failed to add readings' }
+        return { success: true }
     }
+
+    // Group 1: Soil (Moisture + NPK)
+    await processGroup('Manual Soil Sensor', 'soil_moisture', {
+        soil_moisture: data.soil_moisture,
+        ph_level: data.ph_level, // Saved as Soil pH
+        npk_nitrogen: data.npk_nitrogen,
+        npk_phosphorus: data.npk_phosphorus,
+        npk_potassium: data.npk_potassium
+    })
+
+    // Group 2: Water (pH + Aqua metrics)
+    // Note: pH is often used for Soil too, but Dashboard expects it on 'water_quality' device currently.
+    // If both are needed, we might need a sophisticated UI toggle. For now, we map pH to Water Quality for the dashboard card.
+    await processGroup('Manual Water Sensor', 'water_quality', {
+        ph_level: data.water_ph_level, // Saved as Water pH from new field
+        dissolved_oxygen: data.dissolved_oxygen,
+        ammonia: data.ammonia,
+        nitrate: data.nitrate,
+        salinity: data.salinity
+    })
+
+    // Group 3: Climate (Temp + Hum)
+    await processGroup('Manual Climate Station', 'climate_station', {
+        temperature: data.temperature,
+        humidity: data.humidity
+    })
+
+    revalidatePath(`/dashboard/farms/${data.farm_id}`)
+    revalidatePath('/dashboard')
+    return { success: true, message: 'Readings recorded successfully' }
 }
 
 

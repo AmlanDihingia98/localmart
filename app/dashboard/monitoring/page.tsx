@@ -21,37 +21,95 @@ export default async function MonitoringPage() {
         .from('iot_readings')
         .select('*')
         .order('recorded_at', { ascending: false })
-        .limit(200)
+        .limit(500)
 
     const farmsWithData = (farms as any[])?.map(farm => {
         const farmDevices = (devices as any[])?.filter(d => d.farm_id === farm.id) || []
-        const deviceReadings = farmDevices.map(device => {
+
+        // Flatten all metrics from all devices into a single list of cards to render
+        // Use a Map to deduplicate metrics by type (e.g., 'temperature', 'humidity')
+        // Key: metric type, Value: metric object with timestamp for comparison
+        const metricsMap = new Map<string, any>()
+
+        const updateMetric = (key: string, newMetric: any, timestamp: string) => {
+            const existing = metricsMap.get(key)
+            if (!existing || new Date(timestamp) > new Date(existing._timestamp)) {
+                metricsMap.set(key, { ...newMetric, _timestamp: timestamp })
+            }
+        }
+
+        farmDevices.forEach(device => {
             const latestReading = (readings as any[])?.find(r => r.device_id === device.id)
-            let value = 0
-            if (latestReading) {
-                // Map the correct column based on device type
-                if (device.device_type === 'soil_moisture') value = Number(latestReading.soil_moisture)
-                else if (device.device_type === 'water_quality') value = Number(latestReading.ph_level) // Assuming pH for now
-                else if (device.device_type === 'climate_station') value = Number(latestReading.temperature)
-                else if (device.device_type === 'ph') value = Number(latestReading.ph_level)
-                else if (device.device_type === 'temperature') value = Number(latestReading.temperature)
-                else if (device.device_type === 'humidity') value = Number(latestReading.humidity)
+            if (!latestReading) return
+
+            const timestamp = latestReading.recorded_at
+
+            // 1. Soil Moisture Device -> Soil Moisture & Soil pH
+            if (device.device_type === 'soil_moisture') {
+                updateMetric('soil_moisture', {
+                    id: `${device.id}-soil`,
+                    type: 'soil_moisture',
+                    value: latestReading.soil_moisture ?? '--',
+                    unit: '%',
+                    status: latestReading.soil_moisture == null ? 'warning' : (latestReading.soil_moisture < 30 ? 'warning' : 'good')
+                }, timestamp)
+
+                updateMetric('soil_ph', {
+                    id: `${device.id}-ph`,
+                    type: 'ph',
+                    title: 'Soil pH Level',
+                    value: latestReading.ph_level ?? '--',
+                    unit: ' pH',
+                    status: latestReading.ph_level == null ? 'warning' : ((latestReading.ph_level < 6 || latestReading.ph_level > 8) ? 'warning' : 'good')
+                }, timestamp)
             }
 
-            // Determine status mock logic
-            let status: 'good' | 'warning' | 'critical' = 'good'
-            if (value === 0) status = 'warning'
+            // 2. Water Quality Device -> Water pH, DO, etc.
+            else if (device.device_type === 'water_quality') {
+                updateMetric('water_ph', {
+                    id: `${device.id}-wph`,
+                    type: 'ph',
+                    title: 'Water pH Level',
+                    value: latestReading.ph_level ?? '--',
+                    unit: ' pH',
+                    status: 'good'
+                }, timestamp)
 
-            return {
-                ...device,
-                currentValue: value,
-                status,
-                lastUpdate: latestReading?.recorded_at
+                updateMetric('dissolved_oxygen', {
+                    id: `${device.id}-do`,
+                    type: 'dissolved_oxygen',
+                    value: latestReading.dissolved_oxygen ?? '--',
+                    unit: ' mg/L',
+                    status: latestReading.dissolved_oxygen == null ? 'warning' : (latestReading.dissolved_oxygen < 4 ? 'critical' : 'good')
+                }, timestamp)
+            }
+
+            // 3. Climate Station -> Temp, Humidity
+            else if (device.device_type === 'climate_station') {
+                updateMetric('temperature', {
+                    id: `${device.id}-temp`,
+                    type: 'temperature',
+                    value: latestReading.temperature ?? '--',
+                    unit: '°C',
+                    status: 'good'
+                }, timestamp)
+
+                updateMetric('humidity', {
+                    id: `${device.id}-hum`,
+                    type: 'humidity',
+                    value: latestReading.humidity ?? '--',
+                    unit: '%',
+                    status: 'good'
+                }, timestamp)
             }
         })
+
+        // Convert Map values to array, removing internal _timestamp
+        const allMetrics = Array.from(metricsMap.values()).map(({ _timestamp, ...rest }) => rest)
+
         return {
             ...farm,
-            devices: deviceReadings
+            metrics: allMetrics
         }
     }) || []
 
@@ -101,19 +159,20 @@ export default async function MonitoringPage() {
                     farmsWithData.map(farm => (
                         <div key={farm.id} className="space-y-3">
                             <h3 className="text-xl font-semibold px-1">{farm.name}</h3>
-                            {(farm.devices as any[]).length === 0 ? (
+                            {farm.metrics.length === 0 ? (
                                 <div className="border border-dashed rounded-lg p-8 text-center text-sm text-muted-foreground">
-                                    No IoT devices connected to this farm.
+                                    No sensor data available for this farm yet.
                                 </div>
                             ) : (
                                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                                    {(farm.devices as any[]).map(device => (
+                                    {farm.metrics.map((metric: any) => (
                                         <IoTCard
-                                            key={device.id}
-                                            type={device.device_type as any} // Cast safely knowing schema
-                                            value={device.currentValue}
-                                            unit={device.device_type === 'temperature' ? '°C' : device.device_type === 'humidity' || device.device_type === 'soil_moisture' ? '%' : 'pH'}
-                                            status={device.status}
+                                            key={metric.id}
+                                            title={metric.title}
+                                            type={metric.type}
+                                            value={metric.value}
+                                            unit={metric.unit}
+                                            status={metric.status}
                                         />
                                     ))}
                                 </div>

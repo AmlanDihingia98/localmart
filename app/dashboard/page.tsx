@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Activity, DollarSign, Sprout, Droplets, Scale, AlertTriangle, TrendingUp, Users } from "lucide-react"
+import { Activity, DollarSign, Sprout, Droplets, Scale, AlertTriangle, TrendingUp, Users, Thermometer, Wind, Beaker, Gauge } from "lucide-react"
 import { GrowthChart } from "@/components/dashboard/growth-chart"
 import { createClient } from "@/lib/supabase/server"
 import Link from "next/link"
@@ -8,19 +8,71 @@ import { AddSensorDialog } from "@/components/farm/add-sensor-dialog"
 import { AddExpenseDialog } from "@/components/farm/add-expense-dialog"
 import { AddLogDialog } from "@/components/farm/add-log-dialog"
 import { AddHarvestDialog } from "@/components/farm/add-harvest-dialog"
+import { FarmSelector } from "@/components/dashboard/farm-selector"
 
-export default async function DashboardPage() {
+export const dynamic = 'force-dynamic'
+
+export default async function DashboardPage(props: { searchParams: Promise<any> }) {
+    const searchParams = await props.searchParams
+    const farmId = searchParams?.farmId
     const supabase = await createClient()
 
     // 1. Fetch Data
     const { data: farms } = await supabase.from('farms').select('*')
     const { data: logs } = await supabase.from('operational_logs').select('*').order('log_date', { ascending: false })
-    const { data: readings } = await supabase.from('iot_readings').select('*').order('recorded_at', { ascending: false }).limit(1)
+
+    // Fetch devices to map distinct types reliable
+    // We need farm_id to filter by selected farm
+    let query = supabase.from('iot_devices').select('id, device_type, farm_id')
+
+    // Apply filter at DB level for efficiency, or JS level?
+    // JS level is fine since devices list is small. 
+    // But if we filter at DB level, we need to handle the "All" case.
+    // Let's fetch all and filter in JS to reuse the same query logic easily.
+    const { data: allDevices } = await query
+
+    const devices = farmId
+        ? allDevices?.filter((d: any) => d.farm_id === farmId)
+        : allDevices
+
+
+
     const { data: harvests } = await supabase.from('harvests').select('*')
     const { data: expenses } = await supabase.from('expenses').select('*')
 
     // 2. Calculate Agronomy Metrics
-    const latestReading = (readings as any[])?.[0]
+    // 2. Calculate Agronomy Metrics
+
+    // 3. Robust Data Fetching: Targeted Queries
+    // Queries specifically for the latest complete reading of each interest type.
+    const fetchLatestReading = async (type: string): Promise<any> => {
+        // Get IDs for this type
+        // @ts-ignore
+        const targetIds = devices?.filter((d: any) => d.device_type === type).map((d: any) => d.id) || []
+
+        if (targetIds.length === 0) return null
+
+        const { data } = await supabase
+            .from('iot_readings')
+            .select('*')
+            .in('device_id', targetIds)
+            .order('recorded_at', { ascending: false })
+            .limit(1)
+            .maybeSingle()
+
+        return data
+    }
+
+    // Execute in parallel for speed
+    const [latestSoil, latestWater, latestClimate] = await Promise.all([
+        fetchLatestReading('soil_moisture'),
+        fetchLatestReading('water_quality'),
+        fetchLatestReading('climate_station')
+    ])
+
+    const latestTemp = latestClimate?.temperature || 0
+    const latestHumidity = latestClimate?.humidity || 0
+
     const waterUsageLogs = (logs as any[])?.filter(l => l.log_type === 'water_usage') || []
     const totalWaterUsage = waterUsageLogs.reduce((acc, l) => acc + (l.quantity || 0), 0)
     const totalHarvestKg = (harvests as any[])?.reduce((acc, h) => acc + (h.quantity_kg || 0), 0) || 0
@@ -32,14 +84,12 @@ export default async function DashboardPage() {
     const feedLogs = (logs as any[])?.filter(l => l.log_type === 'feed_input') || []
     const totalFeed = feedLogs.reduce((acc, l) => acc + (l.quantity || 0), 0)
     // Simplified Biomass Delta: Current Biomass (from latest log) - Initial (assumed 0 for now)
-    const latestBiomassLog = (logs as any[])?.find(l => l.log_type === 'biomass_check')
+    const latestBiomassLog = (logs as any[])?.find(l => l.log_type === 'biomass_check' || l.log_type === 'growth_check')
     const currentBiomass = latestBiomassLog?.quantity || 1 // Avoid div by zero
     const fcr = (totalFeed / currentBiomass).toFixed(2)
 
-    // KPI: Disease Risk (Mock logic based on humidity/temp)
-    const temp = latestReading?.temperature || 0
-    const humidity = latestReading?.humidity || 0
-    const diseaseRisk = (temp > 30 && humidity > 80) ? "High" : "Low"
+    // KPI: Disease Risk (High if Temp > 30 AND Hum > 80)
+    const diseaseRisk = (latestTemp > 30 && latestHumidity > 80) ? "High" : "Low"
 
     // 3. Calculate Production Metrics
     const totalMortality = (logs as any[])?.filter(l => l.log_type === 'mortality').reduce((acc, l) => acc + (l.quantity || 0), 0) || 0
@@ -49,7 +99,7 @@ export default async function DashboardPage() {
 
     // Growth Velocity (Avg Daily Growth)
     // Need at least 2 biomass logs to calculate velocity
-    const biomassLogs = (logs as any[])?.filter(l => l.log_type === 'biomass_check').sort((a, b) => new Date(a.log_date).getTime() - new Date(b.log_date).getTime()) || []
+    const biomassLogs = (logs as any[])?.filter(l => l.log_type === 'biomass_check' || l.log_type === 'growth_check').sort((a, b) => new Date(a.log_date).getTime() - new Date(b.log_date).getTime()) || []
     let growthVelocity = "0.00"
     if (biomassLogs.length >= 2) {
         const first = biomassLogs[0]
@@ -87,6 +137,7 @@ export default async function DashboardPage() {
             <div className="flex items-center justify-between space-y-2">
                 <h2 className="text-3xl font-bold tracking-tight">Dashboard</h2>
                 <div className="flex items-center space-x-2">
+                    <FarmSelector farms={farms as any[]} />
                     <AddSensorDialog farms={farms as any[]} />
                     <AddLogDialog farms={farms as any[]} />
                     <AddExpenseDialog farms={farms as any[]} />
@@ -98,33 +149,112 @@ export default async function DashboardPage() {
             </div>
 
             {/* SECTION 1: AGRONOMY & ENVIRONMENTAL (Real-time / Daily) */}
-            <div>
-                <h3 className="text-xl font-semibold mb-4">1. Agronomy & Environmental</h3>
+            {/* SECTION 1: AGRONOMY & ENVIRONMENTAL (Real-time / Daily) */}
+            <div className="space-y-4">
+                <h3 className="text-xl font-semibold">1. Agronomy & Environmental</h3>
+
+                {/* Main Sensor Cluster */}
+                <div className="grid gap-4 md:grid-cols-3">
+                    {/* Soil Health Card */}
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">Soil Health & Nutrients</CardTitle>
+                            <Sprout className="h-4 w-4 text-green-600" />
+                        </CardHeader>
+                        <CardContent>
+                            <div className="flex justify-between items-end mb-4">
+                                <div>
+                                    <div className="text-3xl font-bold">{latestSoil?.soil_moisture ?? '--'}%</div>
+                                    <p className="text-xs text-muted-foreground">Moisture Level</p>
+                                </div>
+                                <div className="text-right">
+                                    <div className="text-xl font-semibold">{latestSoil?.ph_level ?? '--'}</div>
+                                    <p className="text-xs text-muted-foreground">pH Level</p>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-2 pt-2 border-t">
+                                <div className="text-center">
+                                    <div className="text-sm font-medium">{latestSoil?.npk_nitrogen ?? '--'}</div>
+                                    <div className="text-[10px] text-muted-foreground">Nitrogen</div>
+                                </div>
+                                <div className="text-center border-l border-r">
+                                    <div className="text-sm font-medium">{latestSoil?.npk_phosphorus ?? '--'}</div>
+                                    <div className="text-[10px] text-muted-foreground">Phosphorus</div>
+                                </div>
+                                <div className="text-center">
+                                    <div className="text-sm font-medium">{latestSoil?.npk_potassium ?? '--'}</div>
+                                    <div className="text-[10px] text-muted-foreground">Potassium</div>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Water Quality Card */}
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">Water Quality System</CardTitle>
+                            <Droplets className="h-4 w-4 text-cyan-500" />
+                        </CardHeader>
+                        <CardContent>
+                            <div className="flex justify-between items-end mb-4">
+                                <div>
+                                    <div className="text-3xl font-bold">{latestWater?.dissolved_oxygen ?? '--'} <span className="text-lg font-normal text-muted-foreground">mg/L</span></div>
+                                    <p className="text-xs text-muted-foreground">Dissolved Oxygen</p>
+                                </div>
+                                <div className="text-right">
+                                    <div className="text-xl font-semibold">{latestWater?.ph_level ?? '--'}</div>
+                                    <p className="text-xs text-muted-foreground">pH Level</p>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-2 pt-2 border-t">
+                                <div className="text-center">
+                                    <div className={`text-sm font-medium ${(latestWater?.ammonia || 0) > 0.5 ? 'text-red-500' : ''}`}>{latestWater?.ammonia ?? '--'}</div>
+                                    <div className="text-[10px] text-muted-foreground">Ammonia</div>
+                                </div>
+                                <div className="text-center border-l border-r">
+                                    <div className="text-sm font-medium">{latestWater?.nitrate ?? '--'}</div>
+                                    <div className="text-[10px] text-muted-foreground">Nitrate</div>
+                                </div>
+                                <div className="text-center">
+                                    <div className="text-sm font-medium">{latestWater?.salinity ?? '--'}</div>
+                                    <div className="text-[10px] text-muted-foreground">Salinity (ppt)</div>
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    {/* Climate Card */}
+                    <Card>
+                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                            <CardTitle className="text-sm font-medium">Climate & Environment</CardTitle>
+                            <Wind className="h-4 w-4 text-sky-500" />
+                        </CardHeader>
+                        <CardContent>
+                            <div className="flex justify-between items-end mb-4">
+                                <div>
+                                    <div className="text-3xl font-bold">{latestTemp ?? '--'}°C</div>
+                                    <p className="text-xs text-muted-foreground">Temperature</p>
+                                </div>
+                                <div className="text-right">
+                                    <div className="text-xl font-semibold">{latestHumidity ?? '--'}%</div>
+                                    <p className="text-xs text-muted-foreground">Humidity</p>
+                                </div>
+                            </div>
+
+                            <div className="pt-2 border-t flex items-center justify-between">
+                                <span className="text-xs font-medium">Disease Risk Factor</span>
+                                <div className={`px-2 py-1 rounded-full text-xs font-bold ${diseaseRisk === 'High' ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                                    {diseaseRisk}
+                                </div>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+
+                {/* Secondary KPIs */}
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                    {/* Real-time Sensors */}
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Soil Moisture</CardTitle>
-                            <Droplets className="h-4 w-4 text-blue-500" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{latestReading?.soil_moisture || '--'}%</div>
-                            <p className="text-xs text-muted-foreground">pH: {latestReading?.ph_level || '--'}</p>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Water Quality</CardTitle>
-                            <Activity className="h-4 w-4 text-cyan-500" />
-                        </CardHeader>
-                        <CardContent>
-                            <div className="text-2xl font-bold">{latestReading?.dissolved_oxygen || '--'} mg/L</div>
-                            <p className="text-xs text-muted-foreground">O2 Level (Aqua)</p>
-                        </CardContent>
-                    </Card>
-
-                    {/* Calculated Agronomy KPIs */}
                     <Card>
                         <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                             <CardTitle className="text-sm font-medium">Water Efficiency</CardTitle>
@@ -144,17 +274,6 @@ export default async function DashboardPage() {
                         <CardContent>
                             <div className="text-2xl font-bold">{fcr}</div>
                             <p className="text-xs text-muted-foreground">Target: 1.2 - 1.5</p>
-                        </CardContent>
-                    </Card>
-
-                    <Card>
-                        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle className="text-sm font-medium">Disease Risk</CardTitle>
-                            <AlertTriangle className={`h-4 w-4 ${diseaseRisk === 'High' ? 'text-red-500' : 'text-green-500'}`} />
-                        </CardHeader>
-                        <CardContent>
-                            <div className={`text-2xl font-bold ${diseaseRisk === 'High' ? 'text-red-500' : 'text-green-500'}`}>{diseaseRisk}</div>
-                            <p className="text-xs text-muted-foreground">Based on Temp/Hum</p>
                         </CardContent>
                     </Card>
                 </div>
@@ -232,7 +351,7 @@ export default async function DashboardPage() {
                         </CardHeader>
                         <CardContent>
                             <div className="text-2xl font-bold text-green-600">₹{parseFloat(profitPerBigha).toLocaleString()}</div>
-                            <p className="text-xs text-muted-foreground">Across {totalArea} Bighas</p>
+                            <p className="text-xs text-muted-foreground">Across {totalArea.toFixed(1)} Bighas</p>
                         </CardContent>
                     </Card>
 

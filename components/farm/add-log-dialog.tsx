@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Plus } from "lucide-react"
@@ -60,6 +60,19 @@ export function AddLogDialog({ farmId, farms }: AddLogDialogProps) {
         },
     })
 
+    const logType = form.watch("log_type")
+    const avgWeight = form.watch("average_weight")
+    const totalCount = form.watch("total_count")
+
+    useEffect(() => {
+        if ((logType === 'biomass_check' || logType === 'growth_check')) {
+            if (avgWeight && totalCount) {
+                const totalBiomass = avgWeight * totalCount
+                form.setValue('quantity', totalBiomass)
+            }
+        }
+    }, [logType, avgWeight, totalCount, form])
+
     // Reset form when dialog opens or defaults change
     // Effect/Key logic omitted for brevity, relying on key={open} or similar if needed, 
     // but react-hook-form defaultValues are cached. 
@@ -75,6 +88,8 @@ export function AddLogDialog({ farmId, farms }: AddLogDialogProps) {
                 ...data,
                 quantity: 0, // Reset quantity
                 notes: "",
+                average_weight: undefined,
+                total_count: undefined
             })
             toast.success("Log added successfully!")
         } else {
@@ -83,6 +98,7 @@ export function AddLogDialog({ farmId, farms }: AddLogDialogProps) {
     }
 
     const showFarmSelect = !farmId && farms && farms.length > 0
+    const isBiomassLog = logType === 'biomass_check' || logType === 'growth_check'
 
     return (
         <Dialog open={open} onOpenChange={setOpen}>
@@ -169,17 +185,64 @@ export function AddLogDialog({ farmId, farms }: AddLogDialogProps) {
                             )}
                         />
 
+                        {isBiomassLog && (
+                            <div className="grid grid-cols-2 gap-4 border p-3 rounded-md bg-muted/20">
+                                <FormField
+                                    control={form.control}
+                                    name="average_weight"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Avg Weight (kg/unit)</FormLabel>
+                                            <FormControl>
+                                                <Input
+                                                    type="number"
+                                                    placeholder="e.g. 0.5"
+                                                    step="0.001"
+                                                    {...field}
+                                                    onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+                                                    value={field.value ?? ''}
+                                                />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="total_count"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Est. Count (units)</FormLabel>
+                                            <FormControl>
+                                                <Input
+                                                    type="number"
+                                                    placeholder="e.g. 1000"
+                                                    step="1"
+                                                    {...field}
+                                                    onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+                                                    value={field.value ?? ''}
+                                                />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+                            </div>
+                        )}
+
                         <div className="grid grid-cols-2 gap-4">
                             <FormField
                                 control={form.control}
                                 name="quantity"
                                 render={({ field }) => (
                                     <FormItem>
-                                        <FormLabel>Quantity</FormLabel>
+                                        <FormLabel>Total Biomass / Quantity</FormLabel>
                                         <FormControl>
                                             <Input
                                                 type="number"
                                                 placeholder="0"
+                                                readOnly={isBiomassLog}
+                                                className={isBiomassLog ? "bg-muted" : ""}
                                                 {...field}
                                                 onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))}
                                                 value={field.value ?? ''}

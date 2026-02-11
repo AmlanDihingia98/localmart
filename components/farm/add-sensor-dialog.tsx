@@ -63,7 +63,8 @@ export function AddSensorDialog({ farmId, farms }: AddSensorDialogProps) {
             dissolved_oxygen: undefined,
             ammonia: undefined,
             nitrate: undefined,
-            salinity: undefined
+            salinity: undefined,
+            water_ph_level: undefined
         },
     })
 
@@ -153,7 +154,13 @@ export function AddSensorDialog({ farmId, farms }: AddSensorDialogProps) {
                                         <FormItem>
                                             <FormLabel>Temperature (°C)</FormLabel>
                                             <FormControl>
-                                                <Input type="number" step="0.1" {...field} />
+                                                <Input
+                                                    type="number"
+                                                    step="0.1"
+                                                    {...field}
+                                                    value={field.value ?? ''}
+                                                    onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+                                                />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -166,7 +173,13 @@ export function AddSensorDialog({ farmId, farms }: AddSensorDialogProps) {
                                         <FormItem>
                                             <FormLabel>Humidity (%)</FormLabel>
                                             <FormControl>
-                                                <Input type="number" step="1" {...field} />
+                                                <Input
+                                                    type="number"
+                                                    step="1"
+                                                    {...field}
+                                                    value={field.value ?? ''}
+                                                    onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+                                                />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -179,7 +192,13 @@ export function AddSensorDialog({ farmId, farms }: AddSensorDialogProps) {
                                         <FormItem>
                                             <FormLabel>Soil Moisture (%)</FormLabel>
                                             <FormControl>
-                                                <Input type="number" step="1" {...field} />
+                                                <Input
+                                                    type="number"
+                                                    step="1"
+                                                    {...field}
+                                                    value={field.value ?? ''}
+                                                    onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+                                                />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -190,9 +209,15 @@ export function AddSensorDialog({ farmId, farms }: AddSensorDialogProps) {
                                     name="ph_level"
                                     render={({ field }) => (
                                         <FormItem>
-                                            <FormLabel>pH Level</FormLabel>
+                                            <FormLabel>Soil pH Level</FormLabel>
                                             <FormControl>
-                                                <Input type="number" step="0.1" {...field} />
+                                                <Input
+                                                    type="number"
+                                                    step="0.1"
+                                                    {...field}
+                                                    value={field.value ?? ''}
+                                                    onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+                                                />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -209,7 +234,13 @@ export function AddSensorDialog({ farmId, farms }: AddSensorDialogProps) {
                                         <FormItem>
                                             <FormLabel>Nitrogen</FormLabel>
                                             <FormControl>
-                                                <Input type="number" step="1" {...field} />
+                                                <Input
+                                                    type="number"
+                                                    step="1"
+                                                    {...field}
+                                                    value={field.value ?? ''}
+                                                    onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+                                                />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -222,7 +253,13 @@ export function AddSensorDialog({ farmId, farms }: AddSensorDialogProps) {
                                         <FormItem>
                                             <FormLabel>Phosphorus</FormLabel>
                                             <FormControl>
-                                                <Input type="number" step="1" {...field} />
+                                                <Input
+                                                    type="number"
+                                                    step="1"
+                                                    {...field}
+                                                    value={field.value ?? ''}
+                                                    onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+                                                />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -235,7 +272,13 @@ export function AddSensorDialog({ farmId, farms }: AddSensorDialogProps) {
                                         <FormItem>
                                             <FormLabel>Potassium</FormLabel>
                                             <FormControl>
-                                                <Input type="number" step="1" {...field} />
+                                                <Input
+                                                    type="number"
+                                                    step="1"
+                                                    {...field}
+                                                    value={field.value ?? ''}
+                                                    onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+                                                />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -243,8 +286,29 @@ export function AddSensorDialog({ farmId, farms }: AddSensorDialogProps) {
                                 />
                             </div>
 
+
+
                             <div className="grid grid-cols-2 gap-4 mt-4">
                                 <h3 className="col-span-2 font-semibold text-sm border-b pb-1">Water Quality (Aqua)</h3>
+                                <FormField
+                                    control={form.control}
+                                    name="water_ph_level"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Water pH Level</FormLabel>
+                                            <FormControl>
+                                                <Input
+                                                    type="number"
+                                                    step="0.1"
+                                                    {...field}
+                                                    value={field.value ?? ''}
+                                                    onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+                                                />
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
                                 <FormField
                                     control={form.control}
                                     name="dissolved_oxygen"
@@ -252,7 +316,13 @@ export function AddSensorDialog({ farmId, farms }: AddSensorDialogProps) {
                                         <FormItem>
                                             <FormLabel>Dissolved Oxygen (mg/L)</FormLabel>
                                             <FormControl>
-                                                <Input type="number" step="0.1" {...field} />
+                                                <Input
+                                                    type="number"
+                                                    step="0.1"
+                                                    {...field}
+                                                    value={field.value ?? ''}
+                                                    onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+                                                />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -265,7 +335,13 @@ export function AddSensorDialog({ farmId, farms }: AddSensorDialogProps) {
                                         <FormItem>
                                             <FormLabel>Ammonia (mg/L)</FormLabel>
                                             <FormControl>
-                                                <Input type="number" step="0.01" {...field} />
+                                                <Input
+                                                    type="number"
+                                                    step="0.01"
+                                                    {...field}
+                                                    value={field.value ?? ''}
+                                                    onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+                                                />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -278,7 +354,13 @@ export function AddSensorDialog({ farmId, farms }: AddSensorDialogProps) {
                                         <FormItem>
                                             <FormLabel>Nitrate (mg/L)</FormLabel>
                                             <FormControl>
-                                                <Input type="number" step="0.01" {...field} />
+                                                <Input
+                                                    type="number"
+                                                    step="0.01"
+                                                    {...field}
+                                                    value={field.value ?? ''}
+                                                    onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+                                                />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -291,7 +373,13 @@ export function AddSensorDialog({ farmId, farms }: AddSensorDialogProps) {
                                         <FormItem>
                                             <FormLabel>Salinity (ppt)</FormLabel>
                                             <FormControl>
-                                                <Input type="number" step="0.1" {...field} />
+                                                <Input
+                                                    type="number"
+                                                    step="0.1"
+                                                    {...field}
+                                                    value={field.value ?? ''}
+                                                    onChange={e => field.onChange(e.target.value === '' ? undefined : Number(e.target.value))}
+                                                />
                                             </FormControl>
                                             <FormMessage />
                                         </FormItem>
@@ -303,6 +391,6 @@ export function AddSensorDialog({ farmId, farms }: AddSensorDialogProps) {
                     </form>
                 </Form>
             </DialogContent>
-        </Dialog>
+        </Dialog >
     )
 }

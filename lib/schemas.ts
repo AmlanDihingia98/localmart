@@ -11,12 +11,15 @@ export const logSchema = z.object({
         'fertilizer_application',
         'pest_incidence',
         'water_usage',
-        'biomass_check'
+        'biomass_check',
+        'growth_check'
     ]),
     quantity: z.coerce.number().nonnegative(), // Changed to nonnegative to allow 0 if needed, but positive is better for logs? user asked for specific metrics.
     unit: z.string().min(1, "Unit is required"),
     notes: z.string().optional(),
-    log_date: z.string(),
+    log_date: z.string(), // ISO date string
+    average_weight: z.coerce.number().optional(),
+    total_count: z.coerce.number().optional()
 })
 
 export type LogFormValues = z.infer<typeof logSchema>
@@ -77,6 +80,7 @@ export const sensorReadingSchema = z.object({
     npk_phosphorus: z.coerce.number().nonnegative().optional(),
     npk_potassium: z.coerce.number().nonnegative().optional(),
     // Water Quality
+    water_ph_level: z.coerce.number().min(0).max(14).optional(),
     dissolved_oxygen: z.coerce.number().nonnegative().optional(),
     ammonia: z.coerce.number().nonnegative().optional(),
     nitrate: z.coerce.number().nonnegative().optional(),
