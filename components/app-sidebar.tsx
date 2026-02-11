@@ -1,8 +1,10 @@
 "use client"
 
+import * as React from "react"
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
-import { BarChart3, Home, Leaf, Settings, Activity, Sprout } from "lucide-react"
+import { BarChart3, Home, Settings, Activity, Sprout } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -41,7 +43,15 @@ export function AppSidebar() {
     return (
         <div className="flex h-full w-64 flex-col border-r bg-card px-4 py-6">
             <div className="flex items-center gap-2 px-2 pb-6">
-                <Leaf className="h-6 w-6 text-primary" />
+                <div className="relative h-12 w-12 overflow-hidden rounded-full border border-border">
+                    <Image
+                        src="/logo-refresh.png"
+                        alt="Local Mart Logo"
+                        fill
+                        className="object-cover scale-125"
+                        priority
+                    />
+                </div>
                 <span className="text-lg font-bold tracking-tight">Local Mart</span>
             </div>
             <nav className="flex flex-col gap-2">
@@ -50,7 +60,7 @@ export function AppSidebar() {
                         key={item.href}
                         variant={pathname === item.href ? "secondary" : "ghost"}
                         className={cn(
-                            "justify-start gap-2",
+                            "w-full justify-start gap-2",
                             pathname === item.href && "bg-secondary"
                         )}
                         asChild
